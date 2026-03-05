@@ -1,5 +1,5 @@
 use crate::{
-    analyzer, constitution, paths,
+    analyzer, constitution, drift, gates, paths,
     reports::{self, ReportMeta},
     storage::Db,
     util,
@@ -23,6 +23,7 @@ struct AssetProjectContext {
     source_path: String,
     file_path: String,
     content_hash: String,
+    bit_depth: Option<i64>,
     root_path: String,
     constitution_path: String,
 }
@@ -63,7 +64,7 @@ pub async fn run_worker_loop(db: Db, mut shutdown: watch::Receiver<bool>) -> any
 async fn process_run(db: &Db, run: &ClaimedRun, started_at: &str) -> anyhow::Result<()> {
     let ctx: AssetProjectContext = sqlx::query_as(
         r#"
-        SELECT a.project_id, a.id as asset_id, a.source_path, a.file_path, a.content_hash, p.root_path, p.constitution_path
+        SELECT a.project_id, a.id as asset_id, a.source_path, a.file_path, a.content_hash, a.bit_depth, p.root_path, p.constitution_path
         FROM assets a
         INNER JOIN projects p ON p.id = a.project_id
         WHERE a.id=?
@@ -143,6 +144,12 @@ async fn process_run(db: &Db, run: &ClaimedRun, started_at: &str) -> anyhow::Res
             return Ok(());
         }
     };
+
+    let availability =
+        constitution::build_target_availability(&constitution, &metrics, ctx.bit_depth);
+    let gate_eval = gates::evaluate_gates(&metrics, &constitution, &availability, ctx.bit_depth);
+    let drift_result = drift::compute_drift(&metrics, &constitution, &availability);
+
     let finished_at = util::now_rfc3339();
     let created_at = util::now_rfc3339();
 
@@ -165,9 +172,20 @@ async fn process_run(db: &Db, run: &ClaimedRun, started_at: &str) -> anyhow::Res
         finished_at: finished_at.clone(),
     };
 
-    reports::write_report(&run_dir, &metrics, &meta)
+    if let Err(err) = reports::write_report(&run_dir, &metrics, &gate_eval, &drift_result, &meta)
         .await
-        .with_context(|| format!("write report for run {}", run.id))?;
+        .with_context(|| format!("write report for run {}", run.id))
+    {
+        let finished_at = util::now_rfc3339();
+        mark_failed(
+            db,
+            &run.id,
+            &finished_at,
+            &format!("report write failed: {err:#}"),
+        )
+        .await?;
+        return Ok(());
+    }
 
     mark_done(db, &run.id, &finished_at).await?;
     tracing::info!(run_id = %run.id, asset_id = %ctx.asset_id, "analysis run complete");

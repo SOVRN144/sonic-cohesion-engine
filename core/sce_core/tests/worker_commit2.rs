@@ -73,9 +73,13 @@ async fn worker_writes_non_placeholder_telemetry_artifacts() {
 
     let run_dir = paths::run_dir(&root, &ids.asset_id, &ids.run_id);
     let metrics_path = run_dir.join("metrics.json");
+    let gates_path = run_dir.join("gates.json");
+    let drift_path = run_dir.join("drift.json");
     let report_path = run_dir.join("report.json");
 
     assert!(tokio::fs::metadata(&metrics_path).await.is_ok());
+    assert!(tokio::fs::metadata(&gates_path).await.is_ok());
+    assert!(tokio::fs::metadata(&drift_path).await.is_ok());
     assert!(tokio::fs::metadata(&report_path).await.is_ok());
 
     let metrics_json = tokio::fs::read_to_string(&metrics_path)
@@ -89,6 +93,20 @@ async fn worker_writes_non_placeholder_telemetry_artifacts() {
         .expect("read report");
     assert!(report_json.contains("\"constitution_path\""));
     assert!(report_json.contains("\"asset_content_hash\""));
+    assert!(report_json.contains("\"gate_status\": \"PASS\""));
+    assert!(report_json.contains("\"drift_score\""));
+
+    let gates_json = tokio::fs::read_to_string(&gates_path)
+        .await
+        .expect("read gates");
+    assert!(gates_json.contains("\"gates\""));
+    assert!(gates_json.contains("\"gate_status\""));
+
+    let drift_json = tokio::fs::read_to_string(&drift_path)
+        .await
+        .expect("read drift");
+    assert!(drift_json.contains("\"drift_raw\""));
+    assert!(drift_json.contains("\"fix_list\""));
 }
 
 #[tokio::test]
