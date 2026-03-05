@@ -23,6 +23,26 @@ cargo run -p sce_daemon -- --db-url "sqlite://./sce.db?mode=rwc" --bind 127.0.0.
 - `GET /v1/projects`
 - `POST /v1/projects/:project_id/assets`
 
+## Smoke WAV Fixture
+
+Use a nominal-level WAV during smoke checks so governance outcomes are informative:
+
+```bash
+python3 tools/generate_smoke_wav.py /tmp/sce-smoke.wav --peak-dbfs -12
+```
+
+Alternative (equivalent style target):
+
+```bash
+python3 tools/generate_smoke_wav.py /tmp/sce-smoke.wav --rms-dbfs -18
+```
+
+Single-command smoke runner (daemon + project + WAV/MP3 register + artifact checks):
+
+```bash
+bash tools/run_smoke.sh
+```
+
 ## Notes
 
 - Migration strategy is clean-slate for this baseline: `0001_init.sql` already includes Commit 1.1 hardening fields/constraints.
