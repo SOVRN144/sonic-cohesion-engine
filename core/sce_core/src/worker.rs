@@ -53,13 +53,7 @@ pub async fn run_worker_loop(db: Db, mut shutdown: watch::Receiver<bool>) -> any
 
         if let Err(err) = process_run(&db, &run, &started_at).await {
             let finished_at = util::now_rfc3339();
-            mark_failed(
-                &db,
-                &run.id,
-                &finished_at,
-                &format!("analysis failed: {err:#}"),
-            )
-            .await?;
+            mark_failed(&db, &run.id, &finished_at, &format!("{err:#}")).await?;
         }
     }
 
@@ -116,7 +110,39 @@ async fn process_run(db: &Db, run: &ClaimedRun, started_at: &str) -> anyhow::Res
             }
         };
 
-    let metrics = analyzer::analyze_stub(&internal_path, &run.analyzer_version).await;
+    let metrics = match analyzer::analyze_file(&internal_path, &run.analyzer_version).await {
+        Ok(metrics) => metrics,
+        Err(analyzer::AnalyzerError::Decode(reason)) => {
+            let finished_at = util::now_rfc3339();
+            let format_ext = internal_path
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("bin")
+                .to_ascii_lowercase();
+            mark_failed(
+                db,
+                &run.id,
+                &finished_at,
+                &format!(
+                    "decode failed: {reason} (file={}, format={format_ext})",
+                    ctx.file_path
+                ),
+            )
+            .await?;
+            return Ok(());
+        }
+        Err(analyzer::AnalyzerError::Analysis(reason)) => {
+            let finished_at = util::now_rfc3339();
+            mark_failed(
+                db,
+                &run.id,
+                &finished_at,
+                &format!("analysis failed: {reason}"),
+            )
+            .await?;
+            return Ok(());
+        }
+    };
     let finished_at = util::now_rfc3339();
     let created_at = util::now_rfc3339();
 

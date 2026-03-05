@@ -129,8 +129,16 @@ async fn register_asset(
     }
 
     let source = PathBuf::from(&req.file_path);
+    let extension = util::audio_extension(&source).unwrap_or_else(|| "unknown".to_string());
+    if extension == "m4a" {
+        return Err(AppError::BadRequest(
+            "unsupported format: m4a (supported: wav, aiff, aif, flac, mp3)".into(),
+        ));
+    }
     if !util::is_audio_file(&source) {
-        return Err(AppError::BadRequest("unsupported file type".into()));
+        return Err(AppError::BadRequest(format!(
+            "unsupported format: {extension} (supported: wav, aiff, aif, flac, mp3)"
+        )));
     }
 
     let kind = req.kind.unwrap_or_else(|| "mix".to_string());

@@ -4,7 +4,7 @@ use sqlx::FromRow;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-const ANALYZER_VERSION: &str = "AnalyzerStub/0.0.1";
+const ANALYZER_VERSION: &str = "TelemetryAnalyzer/1.0.0";
 
 #[derive(Debug, FromRow)]
 struct ProjectRoot {

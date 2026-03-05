@@ -29,17 +29,15 @@ pub fn sha256_bytes(bytes: &[u8]) -> String {
 }
 
 pub fn is_audio_file(path: &Path) -> bool {
-    match path
-        .extension()
+    audio_extension(path)
+        .map(|ext| matches!(ext.as_str(), "wav" | "aiff" | "aif" | "flac" | "mp3"))
+        .unwrap_or(false)
+}
+
+pub fn audio_extension(path: &Path) -> Option<String> {
+    path.extension()
         .and_then(|s| s.to_str())
         .map(|s| s.to_ascii_lowercase())
-    {
-        Some(ext) => matches!(
-            ext.as_str(),
-            "wav" | "aiff" | "aif" | "flac" | "mp3" | "m4a"
-        ),
-        None => false,
-    }
 }
 
 #[cfg(test)]
