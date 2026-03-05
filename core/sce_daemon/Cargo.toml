@@ -1,0 +1,13 @@
+[package]
+name = "sce_daemon"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sce_core = { path = "../sce_core" }
+anyhow = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+axum = "0.7"
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

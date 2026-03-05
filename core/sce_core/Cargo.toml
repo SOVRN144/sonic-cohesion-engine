@@ -1,0 +1,33 @@
+[package]
+name = "sce_core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+thiserror = "1"
+
+ tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs", "time", "sync", "signal"] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde", "clock"] }
+
+sha2 = "0.10"
+hex = "0.4"
+
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "macros", "migrate"] }
+
+axum = "0.7"
+tower-http = { version = "0.5", features = ["trace"] }
+
+notify = "6"
+
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3"
