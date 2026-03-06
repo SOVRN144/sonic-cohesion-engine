@@ -1,0 +1,132 @@
+{
+  "gate_status": "PASS",
+  "gates": [
+    {
+      "evidence": {
+        "allowed_hz": [
+          44100,
+          48000
+        ],
+        "configured": true,
+        "value_hz": 48000
+      },
+      "gate_name": "G001_FormatSampleRate",
+      "pass_fail": true,
+      "rationale": "sample rate is allowed",
+      "severity": "BLOCKER"
+    },
+    {
+      "evidence": {
+        "applicable": false,
+        "configured": true
+      },
+      "gate_name": "G002_BitDepth",
+      "pass_fail": true,
+      "rationale": "configured target not applicable",
+      "severity": "INFO"
+    },
+    {
+      "evidence": {
+        "ceiling_dbtp": -1.0,
+        "configured": true,
+        "metric_source": "true_peak_dbtp",
+        "value_dbtp": -11.993794503825747
+      },
+      "gate_name": "G003_TruePeakCeiling",
+      "pass_fail": true,
+      "rationale": "true peak is within ceiling",
+      "severity": "BLOCKER"
+    },
+    {
+      "evidence": {
+        "clipping_allowed": false,
+        "clipping_sample_count": 0,
+        "configured": true
+      },
+      "gate_name": "G004_HardClipping",
+      "pass_fail": true,
+      "rationale": "clipping contract satisfied",
+      "severity": "BLOCKER"
+    },
+    {
+      "evidence": {
+        "configured": false
+      },
+      "gate_name": "W001_StereoCorrelation",
+      "pass_fail": true,
+      "rationale": "target not configured",
+      "severity": "INFO"
+    },
+    {
+      "evidence": {
+        "configured": false
+      },
+      "gate_name": "W002_LRBalance",
+      "pass_fail": true,
+      "rationale": "target not configured",
+      "severity": "INFO"
+    },
+    {
+      "evidence": {
+        "configured": false
+      },
+      "gate_name": "W003_SpectralBandOutside",
+      "pass_fail": true,
+      "rationale": "target not configured",
+      "severity": "INFO"
+    },
+    {
+      "evidence": {
+        "configured": false
+      },
+      "gate_name": "W004_DynamicsOutside",
+      "pass_fail": true,
+      "rationale": "target not configured",
+      "severity": "INFO"
+    },
+    {
+      "evidence": {
+        "configured": false
+      },
+      "gate_name": "W005_LoudnessOutside",
+      "pass_fail": true,
+      "rationale": "target not configured",
+      "severity": "INFO"
+    },
+    {
+      "evidence": {
+        "applicable": true,
+        "configured": true,
+        "point_count": 30
+      },
+      "gate_name": "I001_TonalCurveRecorded",
+      "pass_fail": true,
+      "rationale": "tonal curve recorded",
+      "severity": "INFO"
+    },
+    {
+      "evidence": {
+        "applicable": true,
+        "configured": true,
+        "value": 0.0
+      },
+      "gate_name": "I002_TransientProxyRecorded",
+      "pass_fail": true,
+      "rationale": "transient proxy recorded",
+      "severity": "INFO"
+    }
+  ],
+  "meta": {
+    "analyzer_version": "TelemetryAnalyzer/1.0.0",
+    "asset_content_hash": "37587291e8660484598809e7c84b606eb0b8d481cfe3690a5e6f0e5f731b3648",
+    "asset_id": "0217ee0d-cd8e-4791-9d8e-3478cad9b313",
+    "constitution_hash": "eafe07bf7c12109f8420eb5c1f63527a9e3817166857f80f2670b51f741013d0",
+    "constitution_path": "/Users/sovrn/Desktop/SCE/sce/acceptance_commit7/project/SCE/registry/constitutions/v1.0.yaml",
+    "constitution_version": "v1.0",
+    "created_at": "2026-03-06T12:56:49.102Z",
+    "finished_at": "2026-03-06T12:56:49.102Z",
+    "project_id": "32103c21-8c4b-4875-a3d6-f0718fe6bf9a",
+    "run_id": "4dda7f19-2b8b-47cf-ae53-af598d9eed18",
+    "started_at": "2026-03-06T12:56:48.860Z"
+  }
+}

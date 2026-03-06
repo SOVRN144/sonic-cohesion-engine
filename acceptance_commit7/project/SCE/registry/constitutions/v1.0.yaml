@@ -1,0 +1,12 @@
+constitution_version: "1.0"
+project: "NEW_PROJECT"
+
+intent:
+  keywords: ["cohesion", "control-plane"]
+  notes: "Default constitution template for SCE v1 bootstrap."
+
+audio_contract:
+  allowed_sample_rates_hz: [44100, 48000]
+  allowed_bit_depths: [16, 24, 32]
+  max_true_peak_dbtp: -1.0
+  clipping_allowed: false

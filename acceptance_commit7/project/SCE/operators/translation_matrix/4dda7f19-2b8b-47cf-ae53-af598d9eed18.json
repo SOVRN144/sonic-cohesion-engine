@@ -1,0 +1,215 @@
+{
+  "schema_version": "1.0",
+  "project_root": "/Users/sovrn/Desktop/SCE/sce/acceptance_commit7/project",
+  "run_id": "4dda7f19-2b8b-47cf-ae53-af598d9eed18",
+  "source_constitution_version": "v1.0",
+  "source_constitution_hash": "eafe07bf7c12109f8420eb5c1f63527a9e3817166857f80f2670b51f741013d0",
+  "targets": [
+    {
+      "target_id": "mono_phone",
+      "gate_status": "PASS",
+      "drift_score": 0,
+      "translation_risk": 0,
+      "failed_blockers": 0,
+      "failed_warns": 0,
+      "top_deltas": [],
+      "telemetry": {
+        "channels": 1,
+        "integrated_lufs": -16.140167,
+        "true_peak_dbtp": -11.993278,
+        "approx_true_peak_dbtp": -12.001002,
+        "crest_factor_db": 3.458219,
+        "spectral_centroid_hz": 440.112781,
+        "band_energies_db_rel": {
+          "hz_20_60": -47.871859,
+          "hz_60_150": -44.842677,
+          "hz_150_500": -0.002142,
+          "hz_500_2000": -33.725754,
+          "hz_2000_8000": -47.908359,
+          "hz_8000_16000": -55.280863
+        },
+        "correlation_min": null,
+        "correlation_mean": null,
+        "lr_balance_db": null,
+        "transient_density": 0.0
+      },
+      "notes": [
+        "preset=mono_phone",
+        "mono target; stereo correlation and L/R balance are not applicable",
+        "No constitution targets configured; drift not evaluated."
+      ]
+    },
+    {
+      "target_id": "laptop_speakers",
+      "gate_status": "PASS",
+      "drift_score": 0,
+      "translation_risk": 0,
+      "failed_blockers": 0,
+      "failed_warns": 0,
+      "top_deltas": [],
+      "telemetry": {
+        "channels": 2,
+        "integrated_lufs": -13.72865,
+        "true_peak_dbtp": -12.277243,
+        "approx_true_peak_dbtp": -12.287107,
+        "crest_factor_db": 3.770093,
+        "spectral_centroid_hz": 440.046736,
+        "band_energies_db_rel": {
+          "hz_20_60": -46.939207,
+          "hz_60_150": -43.978627,
+          "hz_150_500": -0.001972,
+          "hz_500_2000": -34.185029,
+          "hz_2000_8000": -50.039152,
+          "hz_8000_16000": -57.561404
+        },
+        "correlation_min": 1.0,
+        "correlation_mean": 1.0,
+        "lr_balance_db": 0.0,
+        "transient_density": 0.0
+      },
+      "notes": [
+        "preset=laptop_speakers",
+        "No constitution targets configured; drift not evaluated."
+      ]
+    },
+    {
+      "target_id": "earbuds",
+      "gate_status": "PASS",
+      "drift_score": 0,
+      "translation_risk": 0,
+      "failed_blockers": 0,
+      "failed_warns": 0,
+      "top_deltas": [],
+      "telemetry": {
+        "channels": 2,
+        "integrated_lufs": -13.448654,
+        "true_peak_dbtp": -11.990379,
+        "approx_true_peak_dbtp": -12.001002,
+        "crest_factor_db": 3.775131,
+        "spectral_centroid_hz": 439.956069,
+        "band_energies_db_rel": {
+          "hz_20_60": -45.908334,
+          "hz_60_150": -43.018021,
+          "hz_150_500": -0.001738,
+          "hz_500_2000": -34.906821,
+          "hz_2000_8000": -58.876272,
+          "hz_8000_16000": -70.378759
+        },
+        "correlation_min": 1.0,
+        "correlation_mean": 1.0,
+        "lr_balance_db": 0.0,
+        "transient_density": 0.0
+      },
+      "notes": [
+        "preset=earbuds",
+        "No constitution targets configured; drift not evaluated."
+      ]
+    },
+    {
+      "target_id": "car",
+      "gate_status": "PASS",
+      "drift_score": 0,
+      "translation_risk": 0,
+      "failed_blockers": 0,
+      "failed_warns": 0,
+      "top_deltas": [],
+      "telemetry": {
+        "channels": 2,
+        "integrated_lufs": -13.283026,
+        "true_peak_dbtp": -11.996899,
+        "approx_true_peak_dbtp": -12.001002,
+        "crest_factor_db": 3.609593,
+        "spectral_centroid_hz": 439.95953,
+        "band_energies_db_rel": {
+          "hz_20_60": -45.925513,
+          "hz_60_150": -43.051361,
+          "hz_150_500": -0.001747,
+          "hz_500_2000": -34.876537,
+          "hz_2000_8000": -57.882337,
+          "hz_8000_16000": -68.07184
+        },
+        "correlation_min": 1.0,
+        "correlation_mean": 1.0,
+        "lr_balance_db": 0.0,
+        "transient_density": 0.0
+      },
+      "notes": [
+        "preset=car",
+        "No constitution targets configured; drift not evaluated."
+      ]
+    },
+    {
+      "target_id": "club_pa",
+      "gate_status": "PASS",
+      "drift_score": 0,
+      "translation_risk": 0,
+      "failed_blockers": 0,
+      "failed_warns": 0,
+      "top_deltas": [],
+      "telemetry": {
+        "channels": 2,
+        "integrated_lufs": -13.79229,
+        "true_peak_dbtp": -12.577383,
+        "approx_true_peak_dbtp": -12.587209,
+        "crest_factor_db": 3.53208,
+        "spectral_centroid_hz": 439.956919,
+        "band_energies_db_rel": {
+          "hz_20_60": -45.874372,
+          "hz_60_150": -43.027147,
+          "hz_150_500": -0.001741,
+          "hz_500_2000": -34.89848,
+          "hz_2000_8000": -58.58013,
+          "hz_8000_16000": -69.624452
+        },
+        "correlation_min": 1.0,
+        "correlation_mean": 1.0,
+        "lr_balance_db": 0.0,
+        "transient_density": 0.0
+      },
+      "notes": [
+        "preset=club_pa",
+        "No constitution targets configured; drift not evaluated."
+      ]
+    },
+    {
+      "target_id": "mono_compat",
+      "gate_status": "PASS",
+      "drift_score": 0,
+      "translation_risk": 0,
+      "failed_blockers": 0,
+      "failed_warns": 0,
+      "top_deltas": [],
+      "telemetry": {
+        "channels": 1,
+        "integrated_lufs": -15.694334,
+        "true_peak_dbtp": -11.993795,
+        "approx_true_peak_dbtp": -12.001002,
+        "crest_factor_db": 3.010261,
+        "spectral_centroid_hz": 439.95203,
+        "band_energies_db_rel": {
+          "hz_20_60": -45.877859,
+          "hz_60_150": -42.980028,
+          "hz_150_500": -0.001727,
+          "hz_500_2000": -34.942214,
+          "hz_2000_8000": -60.4127,
+          "hz_8000_16000": -77.69363
+        },
+        "correlation_min": null,
+        "correlation_mean": null,
+        "lr_balance_db": null,
+        "transient_density": 0.0
+      },
+      "notes": [
+        "preset=mono_compat",
+        "mono target; stereo correlation and L/R balance are not applicable",
+        "No constitution targets configured; drift not evaluated."
+      ]
+    }
+  ],
+  "summary": {
+    "worst_target": "mono_phone",
+    "best_target": "mono_phone",
+    "average_translation_risk": 0.0,
+    "top_failing_targets": []
+  }
+}

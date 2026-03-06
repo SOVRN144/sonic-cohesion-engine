@@ -1,0 +1,19 @@
+{
+  "versions": [
+    {
+      "version": "v1.0",
+      "hash": "eafe07bf7c12109f8420eb5c1f63527a9e3817166857f80f2670b51f741013d0",
+      "path": "/Users/sovrn/Desktop/SCE/sce/acceptance_commit7/project/SCE/registry/constitutions/v1.0.yaml",
+      "added_at": "2026-03-06T12:56:48.633Z",
+      "note": "imported from constitution.yaml"
+    }
+  ],
+  "active_history": [
+    {
+      "version": "v1.0",
+      "hash": "eafe07bf7c12109f8420eb5c1f63527a9e3817166857f80f2670b51f741013d0",
+      "at": "2026-03-06T12:56:48.634Z"
+    }
+  ],
+  "thrash_warnings": []
+}
