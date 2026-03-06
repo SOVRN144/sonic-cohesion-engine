@@ -20,5 +20,6 @@ pub mod reports;
 pub mod scoring;
 pub mod storage;
 pub mod translation_matrix;
+pub(crate) mod translation_sim;
 pub mod util;
 pub mod worker;

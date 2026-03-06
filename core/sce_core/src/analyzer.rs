@@ -69,8 +69,8 @@ pub enum AnalyzerError {
     Analysis(String),
 }
 
-#[derive(Debug)]
-struct DecodedAudio {
+#[derive(Debug, Clone)]
+pub(crate) struct DecodedAudio {
     sample_rate_hz: u32,
     channels: u16,
     samples: Vec<Vec<f64>>,
@@ -96,11 +96,19 @@ pub async fn analyze_file(path: &Path, analyzer_version: &str) -> Result<Metrics
         .to_ascii_lowercase();
 
     let decoded = decode_audio(path).map_err(|err| AnalyzerError::Decode(err.to_string()))?;
-    compute_metrics(&decoded, analyzer_version, &extension)
+    analyze_decoded(&decoded, analyzer_version, is_lossy_extension(&extension))
         .map_err(|err| AnalyzerError::Analysis(err.to_string()))
 }
 
-fn decode_audio(path: &Path) -> anyhow::Result<DecodedAudio> {
+pub(crate) fn analyze_decoded(
+    decoded: &DecodedAudio,
+    analyzer_version: &str,
+    lossy_source: bool,
+) -> anyhow::Result<Metrics> {
+    compute_metrics(decoded, analyzer_version, lossy_source)
+}
+
+pub(crate) fn decode_audio(path: &Path) -> anyhow::Result<DecodedAudio> {
     let source = File::open(path).with_context(|| format!("open file {}", path.display()))?;
     let stream = MediaSourceStream::new(Box::new(source), Default::default());
 
@@ -206,6 +214,47 @@ fn decode_audio(path: &Path) -> anyhow::Result<DecodedAudio> {
     })
 }
 
+impl DecodedAudio {
+    pub(crate) fn from_samples(
+        sample_rate_hz: u32,
+        samples: Vec<Vec<f64>>,
+    ) -> anyhow::Result<Self> {
+        if samples.is_empty() {
+            bail!("decoded audio must contain at least one channel");
+        }
+
+        let frame_count = samples[0].len();
+        if samples.iter().any(|channel| channel.len() != frame_count) {
+            bail!("decoded audio channels must have equal frame counts");
+        }
+
+        let channels = u16::try_from(samples.len())
+            .map_err(|_| anyhow!("decoded audio channel count exceeds u16"))?;
+
+        Ok(Self {
+            sample_rate_hz,
+            channels,
+            samples,
+        })
+    }
+
+    pub(crate) fn sample_rate_hz(&self) -> u32 {
+        self.sample_rate_hz
+    }
+
+    pub(crate) fn channels(&self) -> u16 {
+        self.channels
+    }
+
+    pub(crate) fn samples(&self) -> &[Vec<f64>] {
+        &self.samples
+    }
+
+    pub(crate) fn frame_count(&self) -> usize {
+        self.samples.first().map(Vec::len).unwrap_or(0)
+    }
+}
+
 fn append_decoded(
     decoded: AudioBufferRef<'_>,
     channels: usize,
@@ -237,7 +286,7 @@ fn append_decoded(
 fn compute_metrics(
     decoded: &DecodedAudio,
     analyzer_version: &str,
-    extension: &str,
+    lossy_source: bool,
 ) -> anyhow::Result<Metrics> {
     let channel_count = decoded.channels as usize;
     if channel_count == 0 {
@@ -319,12 +368,16 @@ fn compute_metrics(
         correlation_min: stereo.correlation_min,
         correlation_mean: stereo.correlation_mean,
         lr_balance_db: stereo.lr_balance_db,
-        lossy_source: extension == "mp3",
+        lossy_source,
         integrated_lufs,
         short_term_lufs_series,
         tonal_balance_curve: spectral.tonal_balance_curve,
         transient_density,
     })
+}
+
+fn is_lossy_extension(extension: &str) -> bool {
+    extension == "mp3"
 }
 
 fn compute_lufs_and_true_peak(
@@ -737,7 +790,7 @@ fn sanitize_finite(value: f64, fallback: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{analyze_file, BandEnergies, Metrics};
+    use super::{analyze_decoded, analyze_file, decode_audio, BandEnergies, Metrics};
     use serde::{Deserialize, Serialize};
     use std::{f64::consts::PI, io::Write, path::Path};
 
@@ -855,6 +908,44 @@ mod tests {
         let json_a = serde_json::to_string(&norm_a).expect("json a");
         let json_b = serde_json::to_string(&norm_b).expect("json b");
         assert_eq!(json_a, json_b);
+    }
+
+    #[tokio::test]
+    async fn in_memory_identity_matches_file_analysis() {
+        let td = tempfile::tempdir().expect("tempdir");
+        let wav_path = td.path().join("identity.wav");
+        let sample_rate = 48_000u32;
+        let channels = 2u16;
+        let frames = sample_rate as usize;
+
+        write_wav_i16(
+            &wav_path,
+            sample_rate,
+            channels,
+            frames,
+            |frame_idx, channel_idx| {
+                let t = frame_idx as f64 / sample_rate as f64;
+                let base = (2.0 * PI * 330.0 * t).sin() * 0.35;
+                if channel_idx == 0 {
+                    base
+                } else {
+                    base * 0.9
+                }
+            },
+        )
+        .expect("write wav");
+
+        let file_metrics = analyze_file(&wav_path, "TelemetryAnalyzer/1.0.0")
+            .await
+            .expect("analyze file");
+        let decoded = decode_audio(&wav_path).expect("decode");
+        let in_memory_metrics =
+            analyze_decoded(&decoded, "TelemetryAnalyzer/1.0.0", false).expect("analyze decoded");
+
+        assert_eq!(
+            normalize_metrics(&file_metrics),
+            normalize_metrics(&in_memory_metrics)
+        );
     }
 
     #[tokio::test]
