@@ -1,5 +1,5 @@
 use crate::{
-    analyzer, constitution, drift, gates, paths,
+    analyzer, constitution, drift, gates, paths, policy_registry,
     reports::{self, ReportMeta},
     storage::Db,
     util,
@@ -14,6 +14,7 @@ struct ClaimedRun {
     id: String,
     asset_id: String,
     analyzer_version: String,
+    constitution_version: String,
 }
 
 #[derive(Debug, FromRow)]
@@ -91,25 +92,29 @@ async fn process_run(db: &Db, run: &ClaimedRun, started_at: &str) -> anyhow::Res
         return Ok(());
     }
 
+    let project_root = PathBuf::from(&ctx.root_path);
     let constitution_path = PathBuf::from(&ctx.constitution_path);
-    let (constitution, constitution_hash) =
-        match constitution::load_constitution_and_hash(&constitution_path) {
-            Ok(res) => res,
-            Err(err) => {
-                let finished_at = util::now_rfc3339();
-                mark_failed(
-                    db,
-                    &run.id,
-                    &finished_at,
-                    &format!(
-                        "constitution missing/unreadable: {} ({err})",
-                        constitution_path.display()
-                    ),
-                )
-                .await?;
-                return Ok(());
-            }
-        };
+    let resolved_constitution = match policy_registry::resolve_worker_constitution(
+        &project_root,
+        &constitution_path,
+        &run.constitution_version,
+    ) {
+        Ok(resolved) => resolved,
+        Err(err) => {
+            let finished_at = util::now_rfc3339();
+            mark_failed(
+                db,
+                &run.id,
+                &finished_at,
+                &format!(
+                    "constitution resolution failed for version {}: {err:#}",
+                    run.constitution_version
+                ),
+            )
+            .await?;
+            return Ok(());
+        }
+    };
 
     let metrics = match analyzer::analyze_file(&internal_path, &run.analyzer_version).await {
         Ok(metrics) => metrics,
@@ -145,10 +150,19 @@ async fn process_run(db: &Db, run: &ClaimedRun, started_at: &str) -> anyhow::Res
         }
     };
 
-    let availability =
-        constitution::build_target_availability(&constitution, &metrics, ctx.bit_depth);
-    let gate_eval = gates::evaluate_gates(&metrics, &constitution, &availability, ctx.bit_depth);
-    let drift_result = drift::compute_drift(&metrics, &constitution, &availability);
+    let availability = constitution::build_target_availability(
+        &resolved_constitution.constitution,
+        &metrics,
+        ctx.bit_depth,
+    );
+    let gate_eval = gates::evaluate_gates(
+        &metrics,
+        &resolved_constitution.constitution,
+        &availability,
+        ctx.bit_depth,
+    );
+    let drift_result =
+        drift::compute_drift(&metrics, &resolved_constitution.constitution, &availability);
 
     let finished_at = util::now_rfc3339();
     let created_at = util::now_rfc3339();
@@ -163,9 +177,9 @@ async fn process_run(db: &Db, run: &ClaimedRun, started_at: &str) -> anyhow::Res
         asset_id: ctx.asset_id.clone(),
         run_id: run.id.clone(),
         asset_content_hash: ctx.content_hash.clone(),
-        constitution_version: constitution.constitution_version,
-        constitution_hash,
-        constitution_path: ctx.constitution_path.clone(),
+        constitution_version: resolved_constitution.constitution_version,
+        constitution_hash: resolved_constitution.constitution_hash,
+        constitution_path: resolved_constitution.constitution_path,
         analyzer_version: run.analyzer_version.clone(),
         created_at,
         started_at: started_at.to_string(),
@@ -205,7 +219,7 @@ async fn claim_next_run(db: &Db, now: &str) -> anyhow::Result<Option<ClaimedRun>
           LIMIT 1
         )
         AND status='queued'
-        RETURNING id, asset_id, analyzer_version
+        RETURNING id, asset_id, analyzer_version, constitution_version
         "#,
     )
     .bind(now)

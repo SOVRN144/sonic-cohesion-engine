@@ -1,3 +1,4 @@
+use anyhow::Context;
 use axum::{
     extract::{Path, State},
     routing::{get, post},
@@ -10,7 +11,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::{
     api_error::AppError,
-    ingest,
+    ingest, policy_registry,
     storage::Db,
     util::{self, now_rfc3339},
 };
@@ -84,6 +85,9 @@ async fn create_project(
     if tokio::fs::metadata(&constitution_path).await.is_err() {
         tokio::fs::write(&constitution_path, DEFAULT_CONSTITUTION_YAML).await?;
     }
+
+    policy_registry::init_registry(&root, "v1.0")
+        .with_context(|| format!("initialize registry for {}", root.to_string_lossy()))?;
 
     let project_id = uuid::Uuid::new_v4().to_string();
     let now = now_rfc3339();

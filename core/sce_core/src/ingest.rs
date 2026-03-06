@@ -1,5 +1,5 @@
-use crate::{api_error::AppError, paths, storage::Db, util};
-use anyhow::Context;
+use crate::{api_error::AppError, paths, policy_registry, storage::Db, util};
+use anyhow::{anyhow, Context};
 use sqlx::FromRow;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
@@ -94,19 +94,85 @@ pub async fn register_asset_and_enqueue(
     let run_id = Uuid::new_v4().to_string();
     let queued_at = util::now_rfc3339();
 
+    let _registry_lock =
+        policy_registry::RegistryLock::acquire(&root, policy_registry::RegistryLockMode::Shared)
+            .with_context(|| {
+                format!(
+                    "acquire shared registry lock for enqueue: {}",
+                    root.to_string_lossy()
+                )
+            })?;
+
+    let active_pointer = policy_registry::read_active_pointer(&root).map_err(|err| {
+        AppError::Anyhow(anyhow!(
+            "active.json missing/unreadable for enqueue under {}: {err:#}",
+            root.to_string_lossy()
+        ))
+    })?;
+
+    let mut tx = db
+        .pool()
+        .begin()
+        .await
+        .with_context(|| "begin enqueue transaction")?;
+
+    let canary_consumed =
+        policy_registry::consume_canary_budget(&mut tx, project_id, &queued_at).await?;
+
+    let pinned_version = if let Some(canary) = &canary_consumed {
+        if let Err(err) =
+            policy_registry::ensure_registry_version_exists(&root, &canary.candidate_version)
+        {
+            let _ = tx.rollback().await;
+            return Err(AppError::Anyhow(anyhow!(
+                "canary candidate constitution missing for project {project_id}: {err:#}"
+            )));
+        }
+        canary.candidate_version.clone()
+    } else {
+        active_pointer.version
+    };
+
     sqlx::query(
         r#"
-        INSERT INTO analysis_runs (id, asset_id, status, analyzer_version, queued_at)
-        VALUES (?, ?, 'queued', ?, ?)
+        INSERT INTO analysis_runs (id, asset_id, status, analyzer_version, queued_at, constitution_version)
+        VALUES (?, ?, 'queued', ?, ?, ?)
         "#,
     )
     .bind(&run_id)
     .bind(&asset_id)
     .bind(ANALYZER_VERSION)
     .bind(&queued_at)
-    .execute(db.pool())
+    .bind(&pinned_version)
+    .execute(&mut *tx)
     .await
     .with_context(|| "insert analysis run")?;
+
+    tx.commit()
+        .await
+        .with_context(|| "commit enqueue transaction")?;
+
+    if canary_consumed.is_some() {
+        match policy_registry::fetch_policy_canary_state(db, project_id).await {
+            Ok(Some(state)) => {
+                if let Err(err) = policy_registry::write_canary_projection(&root, &state) {
+                    tracing::warn!(
+                        project_id = %project_id,
+                        error = ?err,
+                        "failed to update canary projection after enqueue; db remains authoritative"
+                    );
+                }
+            }
+            Ok(None) => {}
+            Err(err) => {
+                tracing::warn!(
+                    project_id = %project_id,
+                    error = ?err,
+                    "failed to read canary db state for projection after enqueue"
+                );
+            }
+        }
+    }
 
     Ok((asset_id, run_id))
 }

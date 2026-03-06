@@ -10,6 +10,7 @@ pub mod gates;
 pub mod ingest;
 pub mod models;
 pub mod paths;
+pub mod policy_registry;
 pub mod reports;
 pub mod scoring;
 pub mod storage;

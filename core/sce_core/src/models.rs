@@ -47,6 +47,7 @@ pub struct AnalysisRunRow {
     pub asset_id: String,
     pub status: String,
     pub analyzer_version: String,
+    pub constitution_version: String,
     pub queued_at: String,
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
