@@ -31,6 +31,7 @@ const KEY_FEATURE_IDS: [&str; 6] = [
 ];
 
 const STEREO_KEY_FEATURE_IDS: [&str; 2] = ["stereo.correlation_mean", "stereo.lr_balance_db"];
+const MIN_DIVERSITY_HISTORY: usize = 5;
 
 const IMPUTED_FEATURE_IDS: [&str; 4] = [
     "stereo.correlation_mean",
@@ -354,41 +355,55 @@ pub fn compute_diversity_sentinel(selected_runs: &[DiversityRunInput]) -> Divers
         );
     }
 
-    // Threshold rationale (Commit 4 v0):
-    // - zero_drift_share >= 0.8 identifies sustained near-zero drift pressure.
-    // - distance_collapse_ratio <= 0.4 indicates substantial reduction in sound-space spread.
-    // - median_variance_ratio <= 0.3 indicates broad variance compression across features.
-    // Combined together, these prioritize monoculture-risk signals while avoiding over-triggering.
-    let warn_condition = enough_for_stats
-        && zero_drift_share >= 0.8
-        && distance_collapse_ratio <= 0.4
-        && median_variance_ratio <= 0.3;
-
-    let info_condition =
-        enough_for_stats && (distance_collapse_ratio <= 0.6 || key_feature_hits >= 2);
-
     let mut diversity_alerts = Vec::new();
-    if warn_condition {
-        diversity_alerts.push(DiversityAlert {
-            level: DiversityAlertLevel::Warn,
-            alert_type: "homogenization_risk".to_string(),
-            evidence: json!({
-                "message": "risk of homogenization / metric conditioning detected; explore constitution corridor edges instead of center convergence",
-                "zero_drift_share": zero_drift_share,
-                "distance_collapse_ratio": distance_collapse_ratio,
-                "median_variance_ratio": median_variance_ratio,
-            }),
-        });
-    } else if info_condition {
+    let small_n_guard = selected_count < MIN_DIVERSITY_HISTORY || m < MIN_DIVERSITY_HISTORY;
+    if small_n_guard {
         diversity_alerts.push(DiversityAlert {
             level: DiversityAlertLevel::Info,
-            alert_type: "homogenization_watch".to_string(),
+            alert_type: "insufficient_history".to_string(),
             evidence: json!({
-                "message": "early signal of homogenization / metric conditioning; explore corridor edges before tightening targets",
-                "distance_collapse_ratio": distance_collapse_ratio,
-                "key_feature_hits": key_feature_hits,
+                "message": "insufficient history for diversity inference",
+                "selected_run_count": selected_count,
+                "m_used": m,
+                "minimum_required": MIN_DIVERSITY_HISTORY,
             }),
         });
+    } else {
+        // Threshold rationale (Commit 4 v0):
+        // - zero_drift_share >= 0.8 identifies sustained near-zero drift pressure.
+        // - distance_collapse_ratio <= 0.4 indicates substantial reduction in sound-space spread.
+        // - median_variance_ratio <= 0.3 indicates broad variance compression across features.
+        // Combined together, these prioritize monoculture-risk signals while avoiding over-triggering.
+        let warn_condition = enough_for_stats
+            && zero_drift_share >= 0.8
+            && distance_collapse_ratio <= 0.4
+            && median_variance_ratio <= 0.3;
+
+        let info_condition =
+            enough_for_stats && (distance_collapse_ratio <= 0.6 || key_feature_hits >= 2);
+
+        if warn_condition {
+            diversity_alerts.push(DiversityAlert {
+                level: DiversityAlertLevel::Warn,
+                alert_type: "homogenization_risk".to_string(),
+                evidence: json!({
+                    "message": "risk of homogenization / metric conditioning detected; explore constitution corridor edges instead of center convergence",
+                    "zero_drift_share": zero_drift_share,
+                    "distance_collapse_ratio": distance_collapse_ratio,
+                    "median_variance_ratio": median_variance_ratio,
+                }),
+            });
+        } else if info_condition {
+            diversity_alerts.push(DiversityAlert {
+                level: DiversityAlertLevel::Info,
+                alert_type: "homogenization_watch".to_string(),
+                evidence: json!({
+                    "message": "early signal of homogenization / metric conditioning; explore corridor edges before tightening targets",
+                    "distance_collapse_ratio": distance_collapse_ratio,
+                    "key_feature_hits": key_feature_hits,
+                }),
+            });
+        }
     }
 
     DiversitySentinelOutput {
@@ -648,6 +663,31 @@ mod tests {
             .diversity_alerts
             .iter()
             .any(|alert| alert.level == DiversityAlertLevel::Warn));
+    }
+
+    #[test]
+    fn small_n_emits_single_insufficient_history_info() {
+        let runs = (0..2)
+            .map(|idx| DiversityRunInput {
+                run_id: format!("run-{idx:02}"),
+                finished_at: format!("2026-03-06T00:00:{idx:02}.000Z"),
+                drift_score: 10,
+                metrics: base_metrics(),
+            })
+            .collect::<Vec<_>>();
+
+        let output = compute_diversity_sentinel(&runs);
+        assert_eq!(output.diversity_alerts.len(), 1);
+        let alert = &output.diversity_alerts[0];
+        assert_eq!(alert.level, DiversityAlertLevel::Info);
+        assert_eq!(alert.alert_type, "insufficient_history");
+        assert_eq!(
+            alert.evidence["message"].as_str(),
+            Some("insufficient history for diversity inference")
+        );
+        assert_eq!(alert.evidence["selected_run_count"].as_u64(), Some(2));
+        assert_eq!(alert.evidence["m_used"].as_u64(), Some(2));
+        assert_eq!(alert.evidence["minimum_required"].as_u64(), Some(5));
     }
 
     #[test]

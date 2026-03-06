@@ -123,6 +123,49 @@ fn diversity_collapsed_vectors_emit_warn() {
 }
 
 #[test]
+fn diversity_small_n_emits_only_insufficient_history_info() {
+    let td = tempfile::tempdir().expect("tempdir");
+    let project_root = td.path().join("project");
+
+    for idx in 0..2 {
+        write_run(
+            &project_root,
+            "asset-small-n",
+            &format!("run-{idx:02}"),
+            &format!("2026-03-06T00:04:{idx:02}.000Z"),
+            GateStatus::Pass,
+            10,
+            idx as f64 * 0.1,
+            Some(0.6),
+            Some(0.1),
+        );
+    }
+
+    let summary = generate_project_trends(&project_root, 25).expect("generate trends");
+    let trends = read_json(&summary.output_path);
+    let alerts = trends["diversity_sentinel"]["diversity_alerts"]
+        .as_array()
+        .expect("alerts array");
+
+    assert_eq!(alerts.len(), 1);
+    assert_eq!(alerts[0]["level"], "INFO");
+    assert_eq!(alerts[0]["type"], "insufficient_history");
+    assert_eq!(
+        alerts[0]["evidence"]["message"].as_str(),
+        Some("insufficient history for diversity inference")
+    );
+    assert_eq!(alerts[0]["evidence"]["selected_run_count"], 2);
+    assert_eq!(alerts[0]["evidence"]["m_used"], 2);
+    assert_eq!(alerts[0]["evidence"]["minimum_required"], 5);
+    assert!(!alerts
+        .iter()
+        .any(|alert| alert["type"].as_str() == Some("homogenization_watch")));
+    assert!(!alerts
+        .iter()
+        .any(|alert| alert["level"].as_str() == Some("WARN")));
+}
+
+#[test]
 fn missing_artifacts_are_tolerated_and_recorded() {
     let td = tempfile::tempdir().expect("tempdir");
     let project_root = td.path().join("project");

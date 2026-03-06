@@ -3,6 +3,7 @@ pub mod api;
 pub mod api_error;
 pub mod cll;
 pub mod constitution;
+pub mod constitution_advisor;
 pub mod diversity;
 pub mod drift;
 pub mod gates;

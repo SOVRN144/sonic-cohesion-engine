@@ -57,6 +57,30 @@ Use full valid history (all valid runs):
 cargo run -p sce_daemon --bin sce_cli -- trends --project-root /path/to/project --last-n 0
 ```
 
+Foreground watcher (explicit interval, governance-only):
+
+```bash
+cargo run -p sce_daemon --bin sce_cli -- watch-trends --project-root /path/to/project --last-n 25 --interval-seconds 30
+```
+
+Watcher with full valid history:
+
+```bash
+cargo run -p sce_daemon --bin sce_cli -- watch-trends --project-root /path/to/project --last-n 0 --interval-seconds 30
+```
+
+Advisory constitution suggestion:
+
+```bash
+cargo run -p sce_daemon --bin sce_cli -- suggest-constitution --project-root /path/to/project --last-n 25
+```
+
+Suggestion with full valid history:
+
+```bash
+cargo run -p sce_daemon --bin sce_cli -- suggest-constitution --project-root /path/to/project --last-n 0
+```
+
 ## Notes
 
 - Migration strategy is clean-slate for this baseline: `0001_init.sql` already includes Commit 1.1 hardening fields/constraints.

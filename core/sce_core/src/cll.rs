@@ -177,53 +177,36 @@ struct CandidateRun {
 }
 
 #[derive(Debug, Clone)]
-struct ValidRun {
-    run_id: String,
-    finished_at: String,
-    finished_at_parsed: DateTime<FixedOffset>,
-    gate_status: GateStatus,
-    metrics: Metrics,
-    gates: Vec<GateResult>,
-    drift_score: u32,
-    domain_scores: DomainScores,
-    drift_vector: Vec<DriftVectorItem>,
+pub(crate) struct ValidRun {
+    pub run_id: String,
+    pub finished_at: String,
+    pub finished_at_parsed: DateTime<FixedOffset>,
+    pub gate_status: GateStatus,
+    pub metrics: Metrics,
+    pub gates: Vec<GateResult>,
+    pub drift_score: u32,
+    pub domain_scores: DomainScores,
+    pub drift_vector: Vec<DriftVectorItem>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct LoadedValidRuns {
+    pub canonical_root: PathBuf,
+    pub discovered_count: usize,
+    pub valid_runs: Vec<ValidRun>,
+    pub skipped_runs: usize,
+    pub data_gap_warnings: Vec<DataGapWarning>,
 }
 
 pub fn generate_project_trends(
     project_root: &Path,
     requested_last_n: usize,
 ) -> anyhow::Result<TrendsGenerationSummary> {
-    let canonical_root = fs::canonicalize(project_root)
-        .with_context(|| format!("canonicalize project root: {}", project_root.display()))?;
-
-    let discovered_runs = discover_runs(&canonical_root)?;
-    let discovered_count = discovered_runs.len();
-
-    let mut valid_runs = Vec::new();
-    let mut data_gap_warnings = Vec::new();
-
-    for candidate in discovered_runs {
-        match read_valid_run(&candidate) {
-            Ok(valid) => valid_runs.push(valid),
-            Err(err) => data_gap_warnings.push(DataGapWarning {
-                run_id: candidate.run_id,
-                asset_id: Some(candidate.asset_id),
-                kind: None,
-                detail: err.to_string(),
-            }),
-        }
-    }
-
-    valid_runs.sort_by(|left, right| {
-        left.finished_at_parsed
-            .cmp(&right.finished_at_parsed)
-            .then_with(|| left.run_id.cmp(&right.run_id))
-    });
-
-    let selected_runs = select_window(&valid_runs, requested_last_n);
+    let loaded = load_valid_runs(project_root)?;
+    let canonical_root = loaded.canonical_root;
+    let selected_runs = select_window(&loaded.valid_runs, requested_last_n);
     let selected_count = selected_runs.len();
-    let valid_count = valid_runs.len();
-    let skipped_runs = discovered_count.saturating_sub(valid_count);
+    let valid_count = loaded.valid_runs.len();
 
     let mut notes = Vec::new();
     if selected_count == 0 {
@@ -256,7 +239,7 @@ pub fn generate_project_trends(
                 requested_last_n,
                 selected_run_count: selected_count,
                 valid_runs: valid_count,
-                discovered_runs: discovered_count,
+                discovered_runs: loaded.discovered_count,
             },
             includes_run_ids: true,
         },
@@ -265,11 +248,11 @@ pub fn generate_project_trends(
         telemetry_trends: build_telemetry_trends(&selected_runs),
         diversity_sentinel: diversity_sentinel.clone(),
         flags: TrendFlags {
-            data_gaps: !data_gap_warnings.is_empty()
+            data_gaps: !loaded.data_gap_warnings.is_empty()
                 || (requested_last_n > 0 && selected_count < requested_last_n),
-            skipped_runs,
+            skipped_runs: loaded.skipped_runs,
             notes,
-            data_gap_warnings,
+            data_gap_warnings: loaded.data_gap_warnings,
         },
     };
 
@@ -286,12 +269,50 @@ pub fn generate_project_trends(
         requested_last_n,
         selected_run_count: selected_count,
         valid_runs: valid_count,
-        skipped_runs,
+        skipped_runs: loaded.skipped_runs,
         data_gaps: trends.flags.data_gaps,
         baseline_run_count: diversity_sentinel.baseline_run_count,
         recent_run_count: diversity_sentinel.recent_run_count,
         warn_alert_count: diversity_sentinel.warn_alert_count(),
         info_alert_count: diversity_sentinel.info_alert_count(),
+    })
+}
+
+pub(crate) fn load_valid_runs(project_root: &Path) -> anyhow::Result<LoadedValidRuns> {
+    let canonical_root = fs::canonicalize(project_root)
+        .with_context(|| format!("canonicalize project root: {}", project_root.display()))?;
+
+    let discovered_runs = discover_runs(&canonical_root)?;
+    let discovered_count = discovered_runs.len();
+
+    let mut valid_runs = Vec::new();
+    let mut data_gap_warnings = Vec::new();
+
+    for candidate in discovered_runs {
+        match read_valid_run(&candidate) {
+            Ok(valid) => valid_runs.push(valid),
+            Err(err) => data_gap_warnings.push(DataGapWarning {
+                run_id: candidate.run_id,
+                asset_id: Some(candidate.asset_id),
+                kind: None,
+                detail: err.to_string(),
+            }),
+        }
+    }
+
+    valid_runs.sort_by(|left, right| {
+        left.finished_at_parsed
+            .cmp(&right.finished_at_parsed)
+            .then_with(|| left.run_id.cmp(&right.run_id))
+    });
+
+    let skipped_runs = discovered_count.saturating_sub(valid_runs.len());
+    Ok(LoadedValidRuns {
+        canonical_root,
+        discovered_count,
+        valid_runs,
+        skipped_runs,
+        data_gap_warnings,
     })
 }
 
@@ -399,7 +420,7 @@ fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> anyhow::Result<T> {
     Ok(value)
 }
 
-fn select_window(valid_runs: &[ValidRun], requested_last_n: usize) -> Vec<ValidRun> {
+pub(crate) fn select_window(valid_runs: &[ValidRun], requested_last_n: usize) -> Vec<ValidRun> {
     if requested_last_n == 0 || requested_last_n >= valid_runs.len() {
         valid_runs.to_vec()
     } else {
@@ -583,10 +604,12 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&output).expect("parse trends");
 
         assert_eq!(value["meta"]["window"]["selected_run_count"], 0);
-        assert!(value["diversity_sentinel"]["diversity_alerts"]
+        let alerts = value["diversity_sentinel"]["diversity_alerts"]
             .as_array()
-            .expect("array")
-            .is_empty());
+            .expect("array");
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0]["level"], "INFO");
+        assert_eq!(alerts[0]["type"], "insufficient_history");
         assert!(value["flags"]["notes"]
             .as_array()
             .expect("array")
