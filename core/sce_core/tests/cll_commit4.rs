@@ -49,6 +49,22 @@ fn trends_file_contains_expected_gate_counts_and_sorted_series() {
 
     let summary = generate_project_trends(&project_root, 25).expect("generate trends");
     let trends = read_json(&summary.output_path);
+    assert_eq!(
+        trends
+            .as_object()
+            .expect("trends object")
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec![
+            "diversity_sentinel".to_string(),
+            "drift_trends".to_string(),
+            "flags".to_string(),
+            "gate_trends".to_string(),
+            "meta".to_string(),
+            "telemetry_trends".to_string(),
+        ]
+    );
 
     assert_eq!(trends["gate_trends"]["counts"]["pass"], 1);
     assert_eq!(trends["gate_trends"]["counts"]["warn"], 1);

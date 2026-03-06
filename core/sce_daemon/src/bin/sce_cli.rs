@@ -1,6 +1,9 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand};
-use sce_core::{cll, constitution_advisor, policy_registry, storage, util};
+use sce_core::{
+    ci_check, cll, constitution_advisor, graph, operators, plugin_chain, policy_registry,
+    ref_canon, storage, translation_matrix, util,
+};
 use serde_json::Value;
 use std::{
     path::{Path, PathBuf},
@@ -63,6 +66,42 @@ enum Commands {
     Constitution {
         #[command(subcommand)]
         command: ConstitutionCommands,
+    },
+    /// Reference canon management.
+    Refs {
+        #[command(subcommand)]
+        command: RefCommands,
+    },
+    /// Operator registry and deterministic operator runs.
+    Operators {
+        #[command(subcommand)]
+        command: OperatorCommands,
+    },
+    /// Governance-only CI summary for evaluated runs.
+    CiCheck {
+        #[arg(long)]
+        project_root: PathBuf,
+        #[arg(long, default_value_t = 25)]
+        last_n: usize,
+        #[arg(long)]
+        run_id: Option<String>,
+        #[arg(long)]
+        json_out: Option<PathBuf>,
+    },
+    /// Translation matrix scaffold commands.
+    Translation {
+        #[command(subcommand)]
+        command: TranslationCommands,
+    },
+    /// Stem graph lineage commands.
+    Graph {
+        #[command(subcommand)]
+        command: GraphCommands,
+    },
+    /// Plugin chain sidecar inspection.
+    Chain {
+        #[command(subcommand)]
+        command: ChainCommands,
     },
 }
 
@@ -140,8 +179,103 @@ enum ConstitutionCommands {
     },
 }
 
+#[derive(Debug, Subcommand)]
+enum RefCommands {
+    Add {
+        #[arg(long)]
+        project_root: PathBuf,
+        #[arg(long)]
+        file: PathBuf,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long, default_value = "")]
+        tags: String,
+        #[arg(long, default_value_t = false)]
+        copy_file: bool,
+    },
+    List {
+        #[arg(long)]
+        project_root: PathBuf,
+    },
+    Show {
+        #[arg(long)]
+        project_root: PathBuf,
+        #[arg(long)]
+        content_hash: String,
+    },
+    Remove {
+        #[arg(long)]
+        project_root: PathBuf,
+        #[arg(long)]
+        content_hash: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum OperatorCommands {
+    List,
+    Run {
+        name: String,
+        #[arg(long)]
+        project_root: PathBuf,
+        #[arg(long)]
+        run_id: Option<String>,
+        #[arg(long, default_value_t = 25)]
+        last_n: usize,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum TranslationCommands {
+    Run {
+        #[arg(long)]
+        project_root: PathBuf,
+        #[arg(long)]
+        run_id: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum GraphCommands {
+    Link {
+        #[arg(long)]
+        project_root: PathBuf,
+        #[arg(long)]
+        from: String,
+        #[arg(long)]
+        to: String,
+    },
+    ExportDot {
+        #[arg(long)]
+        project_root: PathBuf,
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ChainCommands {
+    Show {
+        #[arg(long)]
+        project_root: PathBuf,
+        #[arg(long)]
+        run_id: String,
+    },
+}
+
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() {
+    let code = match run_cli().await {
+        Ok(code) => code,
+        Err(err) => {
+            eprintln!("{err:#}");
+            1
+        }
+    };
+    std::process::exit(code);
+}
+
+async fn run_cli() -> anyhow::Result<i32> {
     let cli = Cli::parse();
 
     match cli.command {
@@ -162,9 +296,30 @@ async fn main() -> anyhow::Result<()> {
         Commands::Constitution { command } => {
             run_constitution_command(&cli.db_url, command).await?
         }
+        Commands::Refs { command } => run_refs_command(command)?,
+        Commands::Operators { command } => run_operator_command(command)?,
+        Commands::CiCheck {
+            project_root,
+            last_n,
+            run_id,
+            json_out,
+        } => {
+            let summary = ci_check::build_summary(&project_root, run_id.as_deref(), last_n)
+                .with_context(|| format!("build ci summary for {}", project_root.display()))?;
+            if let Some(output_path) = json_out.as_deref() {
+                ci_check::write_json_out(&summary, output_path).with_context(|| {
+                    format!("write ci summary json to {}", output_path.display())
+                })?;
+            }
+            print_json(&summary)?;
+            return Ok(ci_check::exit_code(&summary));
+        }
+        Commands::Translation { command } => run_translation_command(command)?,
+        Commands::Graph { command } => run_graph_command(command)?,
+        Commands::Chain { command } => run_chain_command(command)?,
     }
 
-    Ok(())
+    Ok(0)
 }
 
 async fn run_constitution_command(
@@ -332,6 +487,120 @@ async fn run_constitution_command(
     Ok(())
 }
 
+fn run_refs_command(command: RefCommands) -> anyhow::Result<()> {
+    match command {
+        RefCommands::Add {
+            project_root,
+            file,
+            name,
+            tags,
+            copy_file,
+        } => {
+            let output =
+                ref_canon::add_ref(&project_root, &file, name.as_deref(), &tags, copy_file)?;
+            print_json(&output)?;
+        }
+        RefCommands::List { project_root } => {
+            let output = ref_canon::list_refs(&project_root)?;
+            print_json(&output)?;
+        }
+        RefCommands::Show {
+            project_root,
+            content_hash,
+        } => {
+            let output = ref_canon::show_ref(&project_root, &content_hash)?;
+            print_json(&output)?;
+        }
+        RefCommands::Remove {
+            project_root,
+            content_hash,
+        } => {
+            let output = ref_canon::remove_ref(&project_root, &content_hash)?;
+            print_json(&output)?;
+        }
+    }
+    Ok(())
+}
+
+fn run_operator_command(command: OperatorCommands) -> anyhow::Result<()> {
+    match command {
+        OperatorCommands::List => {
+            print_json(&operators::list())?;
+        }
+        OperatorCommands::Run {
+            name,
+            project_root,
+            run_id,
+            last_n,
+        } => {
+            let result = operators::run(
+                operators::OperatorRunRequest {
+                    project_root: &project_root,
+                    run_id: run_id.as_deref(),
+                    last_n,
+                },
+                &name,
+            )?;
+            let _ = &result.output_path;
+            print_json(&result.output)?;
+        }
+    }
+    Ok(())
+}
+
+fn run_translation_command(command: TranslationCommands) -> anyhow::Result<()> {
+    match command {
+        TranslationCommands::Run {
+            project_root,
+            run_id,
+        } => {
+            let (output, _output_path) = translation_matrix::run(&project_root, &run_id)?;
+            print_json(&output)?;
+        }
+    }
+    Ok(())
+}
+
+fn run_graph_command(command: GraphCommands) -> anyhow::Result<()> {
+    match command {
+        GraphCommands::Link {
+            project_root,
+            from,
+            to,
+        } => {
+            let output = graph::link(&project_root, &from, &to)?;
+            print_json(&output)?;
+        }
+        GraphCommands::ExportDot { project_root, out } => {
+            let dot = graph::export_dot(&project_root)?;
+            if let Some(output_path) = out {
+                if let Some(parent) = output_path.parent() {
+                    std::fs::create_dir_all(parent).with_context(|| {
+                        format!("create graph dot directory: {}", parent.display())
+                    })?;
+                }
+                std::fs::write(&output_path, dot.as_bytes())
+                    .with_context(|| format!("write graph dot: {}", output_path.display()))?;
+            }
+            print!("{dot}");
+        }
+    }
+    Ok(())
+}
+
+fn run_chain_command(command: ChainCommands) -> anyhow::Result<()> {
+    match command {
+        ChainCommands::Show {
+            project_root,
+            run_id,
+        } => {
+            let output = plugin_chain::show(&project_root, &run_id)?;
+            print_json(&output)?;
+        }
+    }
+    Ok(())
+}
+
 async fn connect_db(db_url: &str) -> anyhow::Result<storage::Db> {
     let db = storage::Db::connect(db_url)
         .await
@@ -340,6 +609,11 @@ async fn connect_db(db_url: &str) -> anyhow::Result<storage::Db> {
         .await
         .with_context(|| format!("enforce startup invariants for {db_url}"))?;
     Ok(db)
+}
+
+fn print_json<T: serde::Serialize>(value: &T) -> anyhow::Result<()> {
+    println!("{}", serde_json::to_string_pretty(value)?);
+    Ok(())
 }
 
 fn print_impact_summary(result: &policy_registry::ImpactResult) {
@@ -487,7 +761,10 @@ fn print_trends_summary(summary: &cll::TrendsGenerationSummary) {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cli, Commands, ConstitutionCommands};
+    use super::{
+        ChainCommands, Cli, Commands, ConstitutionCommands, GraphCommands, OperatorCommands,
+        RefCommands, TranslationCommands,
+    };
     use clap::{CommandFactory, Parser};
 
     #[test]
@@ -593,6 +870,148 @@ mod tests {
                 about.contains(snippet),
                 "expected {name} about to contain snippet {snippet}, got: {about}"
             );
+        }
+    }
+
+    #[test]
+    fn parses_commit7_commands() {
+        let refs_cli = Cli::try_parse_from([
+            "sce_cli",
+            "refs",
+            "add",
+            "--project-root",
+            "/tmp/project",
+            "--file",
+            "/tmp/ref.wav",
+            "--name",
+            "Alpha",
+            "--tags",
+            "warm,bright",
+            "--copy-file",
+        ])
+        .expect("parse refs add");
+
+        match refs_cli.command {
+            Commands::Refs { command } => match command {
+                RefCommands::Add {
+                    project_root,
+                    file,
+                    name,
+                    tags,
+                    copy_file,
+                } => {
+                    assert_eq!(project_root, std::path::PathBuf::from("/tmp/project"));
+                    assert_eq!(file, std::path::PathBuf::from("/tmp/ref.wav"));
+                    assert_eq!(name.as_deref(), Some("Alpha"));
+                    assert_eq!(tags, "warm,bright");
+                    assert!(copy_file);
+                }
+                _ => panic!("expected refs add"),
+            },
+            _ => panic!("expected refs command"),
+        }
+
+        let operators_cli = Cli::try_parse_from([
+            "sce_cli",
+            "operators",
+            "run",
+            "mixops_ci",
+            "--project-root",
+            "/tmp/project",
+            "--last-n",
+            "10",
+        ])
+        .expect("parse operators run");
+
+        match operators_cli.command {
+            Commands::Operators { command } => match command {
+                OperatorCommands::Run {
+                    name,
+                    project_root,
+                    run_id,
+                    last_n,
+                } => {
+                    assert_eq!(name, "mixops_ci");
+                    assert_eq!(project_root, std::path::PathBuf::from("/tmp/project"));
+                    assert!(run_id.is_none());
+                    assert_eq!(last_n, 10);
+                }
+                _ => panic!("expected operators run"),
+            },
+            _ => panic!("expected operators command"),
+        }
+    }
+
+    #[test]
+    fn parses_translation_graph_and_chain_commands() {
+        let translation_cli = Cli::try_parse_from([
+            "sce_cli",
+            "translation",
+            "run",
+            "--project-root",
+            "/tmp/project",
+            "--run-id",
+            "run-1",
+        ])
+        .expect("parse translation");
+
+        match translation_cli.command {
+            Commands::Translation { command } => match command {
+                TranslationCommands::Run {
+                    project_root,
+                    run_id,
+                } => {
+                    assert_eq!(project_root, std::path::PathBuf::from("/tmp/project"));
+                    assert_eq!(run_id, "run-1");
+                }
+            },
+            _ => panic!("expected translation command"),
+        }
+
+        let graph_cli = Cli::try_parse_from([
+            "sce_cli",
+            "graph",
+            "export-dot",
+            "--project-root",
+            "/tmp/project",
+            "--out",
+            "/tmp/graph.dot",
+        ])
+        .expect("parse graph export");
+
+        match graph_cli.command {
+            Commands::Graph { command } => match command {
+                GraphCommands::ExportDot { project_root, out } => {
+                    assert_eq!(project_root, std::path::PathBuf::from("/tmp/project"));
+                    assert_eq!(out, Some(std::path::PathBuf::from("/tmp/graph.dot")));
+                }
+                _ => panic!("expected graph export"),
+            },
+            _ => panic!("expected graph command"),
+        }
+
+        let chain_cli = Cli::try_parse_from([
+            "sce_cli",
+            "chain",
+            "show",
+            "--project-root",
+            "/tmp/project",
+            "--run-id",
+            "run-1",
+        ])
+        .expect("parse chain show");
+
+        match chain_cli.command {
+            Commands::Chain { command } => match command {
+                ChainCommands::Show {
+                    project_root,
+                    run_id,
+                } => {
+                    assert_eq!(project_root, std::path::PathBuf::from("/tmp/project"));
+                    assert_eq!(run_id, "run-1");
+                }
+            },
+            _ => panic!("expected chain command"),
         }
     }
 }

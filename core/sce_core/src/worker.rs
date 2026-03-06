@@ -1,5 +1,5 @@
 use crate::{
-    analyzer, constitution, drift, gates, paths, policy_registry,
+    analyzer, constitution, drift, gates, paths, plugin_chain, policy_registry,
     reports::{self, ReportMeta},
     storage::Db,
     util,
@@ -94,6 +94,7 @@ async fn process_run(db: &Db, run: &ClaimedRun, started_at: &str) -> anyhow::Res
 
     let project_root = PathBuf::from(&ctx.root_path);
     let constitution_path = PathBuf::from(&ctx.constitution_path);
+    let run_dir = paths::run_dir(project_root.as_path(), &ctx.asset_id, &run.id);
     let resolved_constitution = match policy_registry::resolve_worker_constitution(
         &project_root,
         &constitution_path,
@@ -167,11 +168,6 @@ async fn process_run(db: &Db, run: &ClaimedRun, started_at: &str) -> anyhow::Res
     let finished_at = util::now_rfc3339();
     let created_at = util::now_rfc3339();
 
-    let run_dir = paths::run_dir(
-        PathBuf::from(&ctx.root_path).as_path(),
-        &ctx.asset_id,
-        &run.id,
-    );
     let meta = ReportMeta {
         project_id: ctx.project_id.clone(),
         asset_id: ctx.asset_id.clone(),
@@ -185,6 +181,19 @@ async fn process_run(db: &Db, run: &ClaimedRun, started_at: &str) -> anyhow::Res
         started_at: started_at.to_string(),
         finished_at: finished_at.clone(),
     };
+
+    if let Err(err) = plugin_chain::write_worker_chain_meta(
+        &run_dir,
+        &run.id,
+        PathBuf::from(&ctx.source_path).as_path(),
+    ) {
+        tracing::warn!(
+            run_id = %run.id,
+            asset_id = %ctx.asset_id,
+            error = ?err,
+            "failed to write chain meta advisory"
+        );
+    }
 
     if let Err(err) = reports::write_report(&run_dir, &metrics, &gate_eval, &drift_result, &meta)
         .await

@@ -170,10 +170,10 @@ struct DriftArtifact {
 }
 
 #[derive(Debug, Clone)]
-struct CandidateRun {
-    asset_id: String,
-    run_id: String,
-    run_dir: PathBuf,
+pub(crate) struct CandidateRun {
+    pub asset_id: String,
+    pub run_id: String,
+    pub run_dir: PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -181,6 +181,11 @@ pub(crate) struct ValidRun {
     pub run_id: String,
     pub finished_at: String,
     pub finished_at_parsed: DateTime<FixedOffset>,
+    pub asset_content_hash: String,
+    pub analyzer_version: String,
+    pub constitution_version: String,
+    pub constitution_hash: String,
+    pub constitution_path: String,
     pub gate_status: GateStatus,
     pub metrics: Metrics,
     pub gates: Vec<GateResult>,
@@ -316,7 +321,36 @@ pub(crate) fn load_valid_runs(project_root: &Path) -> anyhow::Result<LoadedValid
     })
 }
 
-fn discover_runs(project_root: &Path) -> anyhow::Result<Vec<CandidateRun>> {
+pub(crate) fn find_candidate_run(
+    project_root: &Path,
+    expected_run_id: &str,
+) -> anyhow::Result<Option<CandidateRun>> {
+    let canonical_root = fs::canonicalize(project_root)
+        .with_context(|| format!("canonicalize project root: {}", project_root.display()))?;
+
+    let mut matching = discover_runs(&canonical_root)?
+        .into_iter()
+        .filter(|candidate| candidate.run_id == expected_run_id)
+        .collect::<Vec<_>>();
+
+    matching.sort_by(|left, right| {
+        left.asset_id
+            .cmp(&right.asset_id)
+            .then_with(|| left.run_dir.cmp(&right.run_dir))
+    });
+
+    if matching.len() > 1 {
+        return Err(anyhow!(
+            "multiple runs found for run_id {} under {}",
+            expected_run_id,
+            canonical_root.display()
+        ));
+    }
+
+    Ok(matching.pop())
+}
+
+pub(crate) fn discover_runs(project_root: &Path) -> anyhow::Result<Vec<CandidateRun>> {
     let assets_root = paths::project_sce_dir(project_root).join("assets");
     if !assets_root.exists() {
         return Ok(Vec::new());
@@ -358,7 +392,7 @@ fn discover_runs(project_root: &Path) -> anyhow::Result<Vec<CandidateRun>> {
     Ok(runs)
 }
 
-fn read_valid_run(candidate: &CandidateRun) -> anyhow::Result<ValidRun> {
+pub(crate) fn read_valid_run(candidate: &CandidateRun) -> anyhow::Result<ValidRun> {
     let metrics_path = candidate.run_dir.join("metrics.json");
     let gates_path = candidate.run_dir.join("gates.json");
     let drift_path = candidate.run_dir.join("drift.json");
@@ -373,20 +407,42 @@ fn read_valid_run(candidate: &CandidateRun) -> anyhow::Result<ValidRun> {
     validate_run_meta(&candidate.run_id, &metrics.meta, "metrics")?;
     validate_run_meta(&candidate.run_id, &gates.meta, "gates")?;
     validate_run_meta(&candidate.run_id, &drift.meta, "drift")?;
+    validate_meta_consistency(&metrics.meta, &gates.meta, "metrics", "gates")?;
+    validate_meta_consistency(&metrics.meta, &drift.meta, "metrics", "drift")?;
 
     let finished_at_parsed = DateTime::parse_from_rfc3339(&metrics.meta.finished_at)
         .with_context(|| format!("parse metrics finished_at for run {}", candidate.run_id))?;
+    let MetricsArtifact {
+        meta: metrics_meta,
+        metrics,
+    } = metrics;
+    let GatesArtifact {
+        meta: _gates_meta,
+        gate_status,
+        gates,
+    } = gates;
+    let DriftArtifact {
+        meta: _drift_meta,
+        drift_score,
+        domain_scores,
+        drift_vector,
+    } = drift;
 
     Ok(ValidRun {
         run_id: candidate.run_id.clone(),
-        finished_at: metrics.meta.finished_at,
+        finished_at: metrics_meta.finished_at,
         finished_at_parsed,
-        gate_status: gates.gate_status,
-        metrics: metrics.metrics,
-        gates: gates.gates,
-        drift_score: drift.drift_score,
-        domain_scores: drift.domain_scores,
-        drift_vector: drift.drift_vector,
+        asset_content_hash: metrics_meta.asset_content_hash,
+        analyzer_version: metrics_meta.analyzer_version,
+        constitution_version: metrics_meta.constitution_version,
+        constitution_hash: metrics_meta.constitution_hash,
+        constitution_path: metrics_meta.constitution_path,
+        gate_status,
+        metrics,
+        gates,
+        drift_score,
+        domain_scores,
+        drift_vector,
     })
 }
 
@@ -408,6 +464,71 @@ fn validate_run_meta(
             meta.finished_at
         )
     })?;
+
+    Ok(())
+}
+
+fn validate_meta_consistency(
+    expected: &ReportMeta,
+    actual: &ReportMeta,
+    expected_name: &str,
+    actual_name: &str,
+) -> anyhow::Result<()> {
+    if expected.run_id != actual.run_id {
+        return Err(anyhow!(
+            "{actual_name} run_id mismatch vs {expected_name}: expected {}, found {}",
+            expected.run_id,
+            actual.run_id
+        ));
+    }
+
+    if expected.finished_at != actual.finished_at {
+        return Err(anyhow!(
+            "{actual_name} finished_at mismatch vs {expected_name}: expected {}, found {}",
+            expected.finished_at,
+            actual.finished_at
+        ));
+    }
+
+    if expected.asset_content_hash != actual.asset_content_hash {
+        return Err(anyhow!(
+            "{actual_name} asset_content_hash mismatch vs {expected_name}: expected {}, found {}",
+            expected.asset_content_hash,
+            actual.asset_content_hash
+        ));
+    }
+
+    if expected.analyzer_version != actual.analyzer_version {
+        return Err(anyhow!(
+            "{actual_name} analyzer_version mismatch vs {expected_name}: expected {}, found {}",
+            expected.analyzer_version,
+            actual.analyzer_version
+        ));
+    }
+
+    if expected.constitution_version != actual.constitution_version {
+        return Err(anyhow!(
+            "{actual_name} constitution_version mismatch vs {expected_name}: expected {}, found {}",
+            expected.constitution_version,
+            actual.constitution_version
+        ));
+    }
+
+    if expected.constitution_hash != actual.constitution_hash {
+        return Err(anyhow!(
+            "{actual_name} constitution_hash mismatch vs {expected_name}: expected {}, found {}",
+            expected.constitution_hash,
+            actual.constitution_hash
+        ));
+    }
+
+    if expected.constitution_path != actual.constitution_path {
+        return Err(anyhow!(
+            "{actual_name} constitution_path mismatch vs {expected_name}: expected {}, found {}",
+            expected.constitution_path,
+            actual.constitution_path
+        ));
+    }
 
     Ok(())
 }

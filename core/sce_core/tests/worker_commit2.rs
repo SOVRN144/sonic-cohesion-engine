@@ -85,12 +85,40 @@ async fn worker_writes_non_placeholder_telemetry_artifacts() {
     let metrics_json = tokio::fs::read_to_string(&metrics_path)
         .await
         .expect("read metrics");
+    let metrics_value: serde_json::Value =
+        serde_json::from_str(&metrics_json).expect("parse metrics");
+    assert_eq!(
+        metrics_value
+            .as_object()
+            .expect("metrics object")
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec!["meta".to_string(), "metrics".to_string()]
+    );
     assert!(metrics_json.contains("\"sample_rate_hz\""));
     assert!(!metrics_json.contains("\"placeholder\""));
 
     let report_json = tokio::fs::read_to_string(&report_path)
         .await
         .expect("read report");
+    let report_value: serde_json::Value = serde_json::from_str(&report_json).expect("parse report");
+    assert_eq!(
+        report_value
+            .as_object()
+            .expect("report object")
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec![
+            "drift".to_string(),
+            "gates".to_string(),
+            "meta".to_string(),
+            "metrics".to_string(),
+            "status".to_string(),
+            "summary".to_string(),
+        ]
+    );
     assert!(report_json.contains("\"constitution_path\""));
     assert!(report_json.contains("\"asset_content_hash\""));
     assert!(report_json.contains("\"gate_status\": \"PASS\""));
@@ -99,12 +127,45 @@ async fn worker_writes_non_placeholder_telemetry_artifacts() {
     let gates_json = tokio::fs::read_to_string(&gates_path)
         .await
         .expect("read gates");
+    let gates_value: serde_json::Value = serde_json::from_str(&gates_json).expect("parse gates");
+    assert_eq!(
+        gates_value
+            .as_object()
+            .expect("gates object")
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec![
+            "gate_status".to_string(),
+            "gates".to_string(),
+            "meta".to_string()
+        ]
+    );
     assert!(gates_json.contains("\"gates\""));
     assert!(gates_json.contains("\"gate_status\""));
 
     let drift_json = tokio::fs::read_to_string(&drift_path)
         .await
         .expect("read drift");
+    let drift_value: serde_json::Value = serde_json::from_str(&drift_json).expect("parse drift");
+    assert_eq!(
+        drift_value
+            .as_object()
+            .expect("drift object")
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec![
+            "domain_scores".to_string(),
+            "domain_weights_effective".to_string(),
+            "drift_raw".to_string(),
+            "drift_score".to_string(),
+            "drift_vector".to_string(),
+            "fix_list".to_string(),
+            "meta".to_string(),
+            "notes".to_string(),
+        ]
+    );
     assert!(drift_json.contains("\"drift_raw\""));
     assert!(drift_json.contains("\"fix_list\""));
 }
