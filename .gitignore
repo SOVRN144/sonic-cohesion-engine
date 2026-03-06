@@ -1,4 +1,5 @@
 /target
+/acceptance_commit7/
 **/*.db
 **/*.db-shm
 **/*.db-wal
