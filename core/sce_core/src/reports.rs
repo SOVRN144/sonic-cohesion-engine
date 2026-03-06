@@ -1,10 +1,10 @@
 use crate::{analyzer::Metrics, drift::DriftResult, gates::GateEvaluation};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::path::Path;
 use tokio::fs;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReportMeta {
     pub project_id: String,
     pub asset_id: String,

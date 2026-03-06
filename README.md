@@ -7,13 +7,13 @@ Rust control-plane baseline for SCE:
 ## Run
 
 ```bash
-cargo run -p sce_daemon
+cargo run -p sce_daemon --bin sce_daemon
 ```
 
 With explicit DB URL:
 
 ```bash
-cargo run -p sce_daemon -- --db-url "sqlite://./sce.db?mode=rwc" --bind 127.0.0.1:9911
+cargo run -p sce_daemon --bin sce_daemon -- --db-url "sqlite://./sce.db?mode=rwc" --bind 127.0.0.1:9911
 ```
 
 ## API
@@ -41,6 +41,20 @@ Single-command smoke runner (daemon + project + WAV/MP3 register + artifact chec
 
 ```bash
 bash tools/run_smoke.sh
+```
+
+## CLL Trends CLI
+
+Generate Commit 4 project trends and diversity alerts:
+
+```bash
+cargo run -p sce_daemon --bin sce_cli -- trends --project-root /path/to/project --last-n 25
+```
+
+Use full valid history (all valid runs):
+
+```bash
+cargo run -p sce_daemon --bin sce_cli -- trends --project-root /path/to/project --last-n 0
 ```
 
 ## Notes

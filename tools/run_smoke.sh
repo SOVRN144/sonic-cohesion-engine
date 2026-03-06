@@ -81,7 +81,7 @@ cleanup() {
 trap cleanup EXIT
 
 pushd "$ROOT_DIR" >/dev/null
-cargo run -p sce_daemon -- --db-url "sqlite://$DB_PATH?mode=rwc" --bind "127.0.0.1:$PORT" >"$TMPDIR/daemon.log" 2>&1 &
+cargo run -p sce_daemon --bin sce_daemon -- --db-url "sqlite://$DB_PATH?mode=rwc" --bind "127.0.0.1:$PORT" >"$TMPDIR/daemon.log" 2>&1 &
 DAEMON_PID=$!
 popd >/dev/null
 
